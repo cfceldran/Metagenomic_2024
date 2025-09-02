@@ -1,137 +1,126 @@
-library(ggplot2)
-library(dplyr)
-library(stringr)
-library(tidyr)
-library(vegan)
+#This is the first piece of code that should be run. This code is a template for proper data load and organization in the enviroment, please change it for the 
+# specific needs of the user, but maintain object names, as they will be use throught the rest of the codes.
 
+#Requirements
+  library(ggplot2)
+  library(dplyr)
+  library(stringr)
+  library(tidyr)
+  library(vegan)
 
-#Cargar solo el que nos interesa
+#input files should be OTU abundance matrixes. Only one should be charge per run of the code.
+  #in my example I have 4 distinct files of seed and soil samples
 
-  cult_code <- "_all_"
+  #codigo or _code are use for dinamic naming of the files, and is useful for saving csv and graphs latter on
+
+  #this acts as a file name code to in case you want to perform the filtering by group, i.e. excluding some of them 
+  cult_code <- "_all_" #all refers to all the data
 
   #16S semillas
-  OTUs <- read.csv2("OTUs/OTUs_16S_semillas.csv", header=T, sep=",")
-  codigo <- "sem_16S" 
+  OTUs <- read.csv2("file1.csv", header=T, sep=",")
+  codigo <- "file_1" #change them as needed
   
   #16S suelos
-  OTUs <- read.csv2("OTUs/OTUs_16S_suelo.csv", header=T, sep=",")
-  codigo <- "suel_16S" 
+  OTUs <- read.csv2("file2.csv", header=T, sep=",")
+  codigo <- "file_2" 
   
   #ITS semilla
-  OTUs <- read.csv2("OTUs/OTUs_ITS_semillas.csv", header=T, sep=",")
-  codigo <- "sem_ITS" 
+  OTUs <- read.csv2("file3.csv", header=T, sep=",")
+  codigo <- "file_3" 
   
   #ITS suelos
-  OTUs <- read.csv2("OTUs/OTUs_ITS_suelo.csv", header=T, sep=",")
-  codigo <- "suel_ITS" 
+  OTUs <- read.csv2("file4.csv", header=T, sep=",")
+  codigo <- "file_4" 
 
 
-#METADATA SEMILLAS
-  meta.data <- as.data.frame(readxl::read_excel("tax_otus_metadatos_semillas_17_01_25.xlsx", sheet = 3))
-  meta.data <- meta.data[, c("Samples", "Poblacion", "ELC")]
-  colnames(meta.data)[colnames(meta.data) == "Samples"] <- "Sample"
-  
-  
-  
+#this is for metadata loading, in my case they were in .xslx files, but the command can be changed for you data.
+#Please keep the Sample code in the metadata, its gonna be used in the _cleanUp and posterior analysis.
 
-#METADATA SUELOS
-  meta.data <- as.data.frame(readxl::read_excel("tax_otus_metadatos_suelos_20_01_25.xlsx", sheet = 1))
-  meta.data <- meta.data[, c("Codigo Illumina", "Poblacion", "ELC")]
-  colnames(meta.data)[colnames(meta.data) == "Codigo Illumina"] <- "Sample"
+#METADATA
+  meta.data <- as.data.frame(readxl::read_excel("METADATA.xlsx", sheet = 3))
+  meta.data <- meta.data[, c("Samples", "Population", "ELC")]                       #this is just to filter the metadata of interest
+  colnames(meta.data)[colnames(meta.data) == "Samples"] <- "Sample"                 #the renaming is important for later, this is the code
   
 
+#my analysis was centeredin climatic data, so here I am adding it to metadata. This step is not necesarry if you metadata has all the information you need, otherwise, you can use this to add any data to your metadata
+clim <- readxl::read_excel("ClimFile.xlsx", 
+                           sheet = "SheetName")
+clim <- clim[, c("Acronimo", "Longitud", "Latitud", "cmi06")]                       #filter the climData I want             
+metadata <- left_join(meta.data, clim, by = c("Population" = "Acronimo"))           # join with metadata. In my case was population.
 
+
+
+### WARNING ###
+
+###this is used to filter the data in case you want to eliminate certain groups for certain analysis###
   
-  
-clim <- readxl::read_excel("C:/Users/carlos.fceldran/OneDrive - Universidad Rey Juan Carlos/2024/Data/PoblacionesLupinus.xlsx", 
-                           sheet = "PobsTotal")
-clim <- clim[, c("Acronimo", "Longitud", "Latitud", "cmi06")]
-clim$Latitud <- as.numeric(clim$Latitud)
-clim$Longitud <- as.numeric(clim$Longitud)
-
-metadata <- left_join(meta.data, clim, by = c("Poblacion" = "Acronimo"))
-metadata$cmi06 <- as.numeric(metadata$cmi06)
-
-
-metadata$ELC <- metadata$ELC %>% 
-  tidyr::replace_na(0) #cultivares ELC=0
-
-
-###CUIDADO###
-###ELIMINAR CULTIVARES###
-  #para solo utilizar Wild Accession Data: solo hay en semillas
   metadata <- metadata %>% filter(ELC != 0) #metadatos poblaciones naturales
-  cult_code <- ""
+
+cult_code <- ""                                                                   # as mention before, add the code so you can track the group of data you are using
+
 ###
 
   
 
-#cambiamos código por Sample
-OTUs$Sample <- stringr::str_extract(OTUs$X, "(?<=_)\\d+") #extrae num de samples
+#This is to clean the ID-code that the original matrix had, provided by the sequencing company. It is important to rename the ID-code to "Sample".
+  #this is very niche of my data, cause metadata sample-code was done only with the numeric part of the ID-code. This step might be useless for you, but just in case.
+
+OTUs$Sample <- stringr::str_extract(OTUs$X, "(?<=_)\\d+")                         #the regular expresion should be addapted. This one extracts the number after '_'
 OTUs <- OTUs %>% 
-  select(Sample, everything()) %>%    #mueve samples al principio, facilita redibilidad
-  select(-X)                           #elimina columna código
+  select(Sample, everything()) %>%                                                #moves Sample col to the begining, eases readability, but not necesary for the code
+  select(-X)                                                                      #deletes original code
 
 
-#data frame solo información taxonómica
+#data frame only with the abundance information
 otu_columns <- OTUs %>% 
   select(-Sample)
 otu_columns <- as.data.frame(otu_columns)
-rownames(otu_columns) <- OTUs$Sample #añadimos sample a rownames para no perder la información
+rownames(otu_columns) <- OTUs$Sample                                               #add Sample to rownames not to loose the information
 
-#hacemos coincidir OTUs con metadata (i.e.: hemos eliminado cultivares)
+#we make otu_columns and metadata coincide (i.e.: we have previously filtered metadata)
 otu_columns <- otu_columns %>% 
   filter(rownames(otu_columns) %in% metadata$Sample)
 
 
-#PARA eliminar OTU 2 y 4 (muy mayoritarios) otu_columns <- otu_columns[, -c(2,4)]
 
 
 
-#otu_column presencia/ausencia
+#otu_column presence/absence
 otu_columns_presence <- otu_columns
 otu_columns_presence[otu_columns_presence > 0] <- 1
 
-#calcular abundancia relativa
+#calculate relative abundance 
 otu_columns_relative <- otu_columns / rowSums(otu_columns)
 otu_columns_log_relative <- log1p(otu_columns_relative)  # log(1 + x)
 
 
-#en algunas salen filas de todo 0s, por lo que salen como NAs en otu_columns_relative; recomiendo quitarlas de todas
+#in case you have rows that do not have any OTUs present (empty rows), they will have NAs in otu_columns_relative. This is to eliminate those, without having to manually check
   na_rows <- apply(otu_columns_relative, 1, function(x) any(!is.na(x)))
-  # Limpiarlas de otu_columns y volver a cargar el resto
+  # Clean otu_columns and reload
   otu_columns <- otu_columns[na_rows, ]
   rm(na_rows)
-  # eliminamos datos de metadata también
+  # match it with Metadata
   metadata <- metadata[match(rownames(otu_columns), metadata$Sample), ]
 
-
-#otu_column presencia/ausencia
-otu_columns_presence <- otu_columns
-otu_columns_presence[otu_columns_presence > 0] <- 1
-
-#calcular abundancia relativa
-otu_columns_relative <- otu_columns / rowSums(otu_columns)
-otu_columns_log_relative <- log1p(otu_columns_relative)  # log(1 + x)  
+#recalculate everything 
+                   
+  #otu_column presence/absence
+  otu_columns_presence <- otu_columns
+  otu_columns_presence[otu_columns_presence > 0] <- 1
   
+  #calculate relative abundance 
+  otu_columns_relative <- otu_columns / rowSums(otu_columns)
+  otu_columns_log_relative <- log1p(otu_columns_relative)  # log(1 + x)
+    
+    
+  #calculate frecuency of each OTU
+  otu_frequencies <- colSums(otu_columns_relative > 0) / nrow(otu_columns_relative) # >0 devuelve TRUE si hay presencia, colSums cuenta las instancias de TRUE entre numero de OTUS que hay
   
-#calcular la frecuencia de cada OTU
-otu_frequencies <- colSums(otu_columns_relative > 0) / nrow(otu_columns_relative) # >0 devuelve TRUE si hay presencia, colSums cuenta las instancias de TRUE entre numero de OTUS que hay
 
 
+#Filter OTUs that have less than X% de las muestras
+otu_filtered <- otu_columns_relative[, otu_frequencies > 0.05] # 5% in this example
 
-#Filtrar OTUs que aparecen en menos del X% de las muestras
-otu_filtered <- otu_columns_relative[, otu_frequencies > 0.05]
-
-
-
-
-
-
-#No lo uso, pero aquí esta por si acaso:
-  #join info in the same data.frame
-  all <- left_join(metadata, OTUs, by = "Samples")
-  all$ELC <- as.factor(all$ELC)
-  all$Poblacion <- as.factor(all$Poblacion)
   
+
   
